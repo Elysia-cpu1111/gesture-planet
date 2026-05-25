@@ -330,80 +330,6 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     corePoints.renderOrder = 9
     scene.add(corePoints)
 
-    // ═══ 爱心粒子心跳系统 ═══
-    const HEART_COUNT = 600
-    const heartGeo = new THREE.BufferGeometry()
-    const hPos = new Float32Array(HEART_COUNT * 3)
-    const hCol = new Float32Array(HEART_COUNT * 3)
-    const hSiz = new Float32Array(HEART_COUNT)
-
-    for (let i = 0; i < HEART_COUNT; i++) {
-      const t = (i / HEART_COUNT) * Math.PI * 2
-      const hx = 16 * Math.pow(Math.sin(t), 3)
-      const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
-      const dir = Math.sqrt(hx * hx + hy * hy) || 1
-      // 前 1/3 粒子：外轮廓；后 2/3：内部填充
-      const isOutline = i < 200
-      const r = isOutline
-        ? 0.55 + (Math.random() - 0.5) * 0.01
-        : 0.05 + Math.random() * 0.48
-      hPos[i * 3] = hx / dir * r
-      hPos[i * 3 + 1] = hy / dir * r
-      hPos[i * 3 + 2] = (Math.random() - 0.5) * 0.06
-      // 轮廓粒子稍亮，填充粒子稍暗
-      const bright = isOutline ? 0.9 : 0.5
-      hCol[i * 3] = 1.0
-      hCol[i * 3 + 1] = 0.3 * bright + Math.random() * 0.15
-      hCol[i * 3 + 2] = 0.4 * bright + Math.random() * 0.25
-      hSiz[i] = isOutline ? 0.06 + Math.random() * 0.06 : 0.04 + Math.random() * 0.06
-    }
-
-    heartGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3))
-    heartGeo.setAttribute('color', new THREE.BufferAttribute(hCol, 3))
-    heartGeo.setAttribute('size', new THREE.BufferAttribute(hSiz, 1))
-
-    const heartMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uSparkle: { value: 0 },
-        uTime: { value: 0 },
-      },
-      vertexShader: /* glsl */ `
-        attribute float size;
-        varying vec3 vColor;
-        uniform float uSparkle;
-        uniform float uTime;
-        void main() {
-          vColor = color;
-          // 心跳节奏: lub-dub (周期 0.85s)
-          float cycle = mod(uTime, 0.85);
-          float beat1 = smoothstep(0.0, 0.07, cycle) * (1.0 - smoothstep(0.07, 0.14, cycle));
-          float beat2 = smoothstep(0.22, 0.29, cycle) * (1.0 - smoothstep(0.29, 0.36, cycle));
-          float beat = (beat1 * 0.8 + beat2 * 1.0) * uSparkle;
-          // 脉搏：从 0.85 缩到 1.0 再弹到 1.15
-          float pulse = 1.0 - beat * 0.15 + beat * 0.3 * sin(uTime * 30.0 + position.y * 10.0);
-          // 粒子从中心爆发：sparkle=0 时全部缩在原点
-          vec3 pos = position * uSparkle * pulse;
-          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = size * (350.0 / -mvPosition.z) * (0.5 + beat * 2.0);
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        varying vec3 vColor;
-        void main() {
-          float d = length(gl_PointCoord - 0.5);
-          if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.15, d) * 0.55;
-          gl_FragColor = vec4(vColor, alpha);
-        }
-      `,
-      transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, vertexColors: true,
-    })
-
-    const heartPoints = new THREE.Points(heartGeo, heartMat)
-    heartPoints.renderOrder = 10
-    scene.add(heartPoints)
-
     // ═══ 引用收集 ═══
     const allTintMats = [ringA.mat, ringB.mat, ringC.mat, surface.mat, flow.mat, halo.mat, coreMat]
 
@@ -413,7 +339,6 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       glowMesh, glowMat, occlusionSphere,
       ringA, ringB, ringC, stars, starsMat,
       allTintMats,
-      heartPoints, heartMat,
     }
     cleanupRef.current = refs
 
@@ -445,10 +370,11 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
         ref.allTintMats.forEach(m => { if (m.uniforms.uTint) m.uniforms.uTint.value = tintColor })
       }
 
-      // 核心脉冲（常驻呼吸）
-      ref.coreMat.uniforms.uPulse.value = 1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02
-      // 曝光
-      ref.renderer.toneMappingExposure = 1.2 * brightTarget
+      // 核心脉冲 + 曝光（由下方 spark 区统一控制）
+      if (spark < 0.01) {
+        ref.coreMat.uniforms.uPulse.value = 1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02
+        ref.renderer.toneMappingExposure = 1.2 * brightTarget
+      }
 
       // 三环缩放
       ref.ringA.mat.uniforms.uScale.value = ringTarget
@@ -467,9 +393,11 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       ref.halo.points.scale.setScalar(planetTarget)
       ref.occlusionSphere.scale.setScalar(planetTarget)
 
-      // 爱心爆发
-      ref.heartMat.uniforms.uSparkle.value = spark
-      ref.heartMat.uniforms.uTime.value = time
+      // 核心脉冲 + 闪光（爱你手势）
+      const sparkPulse = 1.0 + spark * 1.5 * Math.abs(Math.sin(time * 14.0))
+      ref.coreMat.uniforms.uPulse.value = (1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02) * sparkPulse
+      ref.corePoints.scale.setScalar(planetTarget * (1.0 + spark * 0.6 * Math.abs(Math.sin(time * 14.0))))
+      ref.renderer.toneMappingExposure = (1.2 + spark * 0.8 * Math.abs(Math.sin(time * 14.0))) * brightTarget
       ref.halo.mat.uniforms.uWave.value = time * 2.2
 
       // 差速旋转
