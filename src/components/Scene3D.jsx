@@ -392,7 +392,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
         ref.allTintMats.forEach(m => { if (m.uniforms.uTint) m.uniforms.uTint.value = tintColor })
       }
 
-      ref.renderer.toneMappingExposure = 1.2 * brightTarget
+      // 曝光由下方 spark 区统一控制
 
       // 三环缩放
       ref.ringA.mat.uniforms.uScale.value = ringTarget
@@ -411,8 +411,13 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       ref.halo.points.scale.setScalar(planetTarget)
       ref.occlusionSphere.scale.setScalar(planetTarget)
 
-      // 核心脉冲 + 闪光
-      ref.coreMat.uniforms.uPulse.value = (1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02) * (1.0 + spark * 0.3 * Math.sin(time * 12.0))
+      // 核心脉冲 + 闪光（爱你手势：剧烈脉冲）
+      const sparkPulse = 1.0 + spark * 1.5 * Math.abs(Math.sin(time * 14.0))
+      ref.coreMat.uniforms.uPulse.value = (1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02) * sparkPulse
+      // 核心缩放弹跳
+      ref.corePoints.scale.setScalar(planetTarget * (1.0 + spark * 0.6 * Math.abs(Math.sin(time * 14.0))))
+      // 全局亮度闪动
+      ref.renderer.toneMappingExposure = (1.2 + spark * 0.8 * Math.abs(Math.sin(time * 14.0))) * brightTarget
       ref.halo.mat.uniforms.uWave.value = time * 2.2
 
       // 混沌散射

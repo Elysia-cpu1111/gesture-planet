@@ -194,14 +194,14 @@ export default function useGesture() {
           // ── 摇手检测：手腕 x 位置振荡 ──
           const wristX = lm[0].x
           wristHistory.push(wristX)
-          if (wristHistory.length > 20) wristHistory.shift()
+          if (wristHistory.length > 25) wristHistory.shift()
 
           // 统计方向变换次数
           let dirChanges = 0
           let lastDir = 0
           for (let i = 1; i < wristHistory.length; i++) {
             const d = wristHistory[i] - wristHistory[i - 1]
-            if (Math.abs(d) < 0.012) continue  // 忽略微小抖动
+            if (Math.abs(d) < 0.006) continue  // 忽略微小抖动
             const dir = d > 0 ? 1 : -1
             if (lastDir !== 0 && dir !== lastDir) dirChanges++
             lastDir = dir
@@ -212,7 +212,7 @@ export default function useGesture() {
           const wristMax = Math.max(...wristHistory)
           const amplitude = wristMax - wristMin
 
-          const isWaving = dirChanges >= 4 && amplitude > 0.08
+          const isWaving = dirChanges >= 3 && amplitude > 0.04
           setWaveActive(isWaving)
           setTargetChaos(isWaving ? 1.0 : 0)
         } else {
