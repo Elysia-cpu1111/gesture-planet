@@ -45,6 +45,10 @@ export default function useGesture() {
   const [targetSparkle, setTargetSparkle] = useState(0)
   const [targetFocus, setTargetFocus] = useState(0)
 
+  // 拇指拖拽亮度
+  const [thumbBrightness, setThumbBrightness] = useState(1.0)
+  const [thumbActive, setThumbActive] = useState(false)
+
   // Phase 1: 加载模型
   useEffect(() => {
     mountedRef.current = true
@@ -102,11 +106,11 @@ export default function useGesture() {
 
   function startRecognitionLoop(video) {
     let lastTick = 0
+    const thumbHistory = []  // 拇指 x 位置滑动窗口
 
     function applyEffect(effectName) {
       const effect = GESTURE_EFFECTS[effectName]
       if (!effect) {
-        // 无手势时平滑回归默认值
         setTargetScale(1.0)
         setTargetBrightness(1.0)
         setTargetSpeed(1.0)
@@ -114,7 +118,6 @@ export default function useGesture() {
         setTargetFocus(0)
         return
       }
-      // 只更新对应的效果值，其他回归默认
       switch (effect.target) {
         case 'ringScale':
           setTargetScale(effect.value)
@@ -163,6 +166,31 @@ export default function useGesture() {
 
       try {
         const results = recognizerRef.current.recognizeForVideo(video, performance.now())
+
+        // ── 拇指拖拽亮度追踪 ──
+        if (results.landmarks && results.landmarks.length > 0) {
+          const lm = results.landmarks[0]
+          // 拇指尖 (4) 的 x 坐标，归一化到图像宽度
+          const thumbTipX = lm[4].x
+          // 前置摄像头镜像：用户左 = 画面右（x高），用户右 = 画面左（x低）
+          // 用户左移 → 变暗（低亮度），用户右移 → 变亮（高亮度）
+          // 即 x 越高 → 亮度越低 → 映射反转：1 - x
+          const raw = 1.0 - thumbTipX
+          // 映射到 0.35 ~ 2.2 范围
+          const bright = 0.35 + raw * 1.85
+
+          thumbHistory.push(bright)
+          if (thumbHistory.length > 8) thumbHistory.shift()
+          const avgBright = thumbHistory.reduce((a, b) => a + b, 0) / thumbHistory.length
+
+          setThumbBrightness(avgBright)
+          setThumbActive(true)
+        } else {
+          thumbHistory.length = 0
+          setThumbActive(false)
+        }
+
+        // ── 手势分类 ──
         if (results.gestures.length > 0 && results.gestures[0].length > 0) {
           const g = results.gestures[0][0]
           gestureHistory.current.push({ cat: g.categoryName, score: g.score })
@@ -211,6 +239,7 @@ export default function useGesture() {
   return {
     gesture, gestureLabel, confidence, phase, error,
     targetScale, targetBrightness, targetSpeed, targetSparkle, targetFocus,
+    thumbBrightness, thumbActive,
     videoRef, startCamera,
   }
 }

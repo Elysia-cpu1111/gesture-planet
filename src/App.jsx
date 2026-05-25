@@ -36,6 +36,7 @@ export default function App() {
   const {
     gesture, gestureLabel, confidence, phase, error,
     targetScale, targetBrightness, targetSpeed, targetSparkle, targetFocus,
+    thumbBrightness, thumbActive,
     videoRef, startCamera,
   } = useGesture()
 
@@ -46,6 +47,9 @@ export default function App() {
   const [speedValue, setSpeedValue] = useState(1.0)
   const [sparkle, setSparkle] = useState(0)
   const [focusVal, setFocusVal] = useState(0)
+
+  // 拇指拖拽亮度优先
+  const activeBrightness = thumbActive ? thumbBrightness : targetBrightness
 
   // 模式
   const [modeIndex, setModeIndex] = useState(0)
@@ -59,7 +63,7 @@ export default function App() {
 
     function updateTargets() {
       targets.ring = targetScale
-      targets.bright = targetBrightness
+      targets.bright = thumbActive ? thumbBrightness : targetBrightness
       targets.speed = targetSpeed
       targets.spark = targetSparkle
       targets.focus = targetFocus
@@ -108,7 +112,7 @@ export default function App() {
 
     animId = requestAnimationFrame(smooth)
     return () => cancelAnimationFrame(animId)
-  }, [targetScale, targetBrightness, targetSpeed, targetSparkle, targetFocus])
+  }, [targetScale, targetBrightness, targetSpeed, targetSparkle, targetFocus, thumbBrightness, thumbActive])
 
   const currentMode = MODES[modeIndex]
 
@@ -215,10 +219,11 @@ export default function App() {
       {/* ── 底部 HUD（重新设计） ── */}
       <div className="hud-bottom">
         {/* 当前手势反馈 */}
-        {gesture !== 'None' && (
+        {(gesture !== 'None' || thumbActive) && (
           <div className="gesture-feedback">
             <span className="gf-icon">
-              {gesture === 'Open_Palm' ? '✋' :
+              {thumbActive ? '👍' :
+               gesture === 'Open_Palm' ? '✋' :
                gesture === 'Closed_Fist' ? '✊' :
                gesture === 'Thumb_Up' ? '👍' :
                gesture === 'Thumb_Down' ? '👎' :
@@ -226,7 +231,9 @@ export default function App() {
                gesture === 'ILoveYou' ? '🤟' :
                gesture === 'Pointing_Up' ? '☝️' : '👋'}
             </span>
-            <span className="gf-effect">{effectLabels[gesture] || gesture}</span>
+            <span className="gf-effect">
+              {thumbActive ? `亮度 ${(thumbBrightness * 100).toFixed(0)}%` : effectLabels[gesture] || gesture}
+            </span>
           </div>
         )}
 
