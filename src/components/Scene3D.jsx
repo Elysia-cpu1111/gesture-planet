@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 
 // ============================================================
-// 视觉层级约定（renderOrder）
+// 视觉层级约定（renderOrder，数字越大越靠前渲染）
 //   0: 星空   1-3: 三环   4: 光晕球
 //   5: 遮挡球   6: 大气壳   7: 流动层   8: 球面   9: 核心
 // ============================================================
@@ -127,6 +127,7 @@ const MODE_TINTS = {
 
 export default function Scene3D({ ringScale, planetScale, brightness, speed, sparkle, mode, quality }) {
   const containerRef = useRef(null)
+  const cleanupRef = useRef(null)
   const ringScaleRef = useRef(ringScale)
   const planetScaleRef = useRef(planetScale)
   const brightnessRef = useRef(brightness ?? 1.0)
@@ -134,7 +135,6 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
   const sparkleRef = useRef(sparkle ?? 0)
   const modeRef = useRef(mode ?? 'default')
   const qualityRef = useRef(quality ?? 'high')
-  const cleanupRef = useRef(null)
 
   useEffect(() => { ringScaleRef.current = ringScale }, [ringScale])
   useEffect(() => { planetScaleRef.current = planetScale }, [planetScale])
@@ -148,7 +148,6 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     const container = containerRef.current
     let disposed = false
 
-    // Quality multiplier
     const qm = quality === 'eco' ? 0.55 : 1.0
     const qCount = (n) => Math.round(n * qm)
 
@@ -191,27 +190,18 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       starsPos[i * 3 + 2] = Math.cos(phi) * r
     }
     starsGeo.setAttribute('position', new THREE.BufferAttribute(starsPos, 3))
-    const starsMat = new THREE.PointsMaterial({
-      color: 0xffffff, size: 0.04, transparent: true, opacity: 0.7,
-      depthWrite: false, blending: THREE.AdditiveBlending,
-    })
+    const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.04, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending })
     const stars = new THREE.Points(starsGeo, starsMat)
     stars.renderOrder = 0
     scene.add(stars)
 
     // ═══ Layer 1-3: 三环 ═══
-    const ringA = createRing({
-      count: qCount(2500), innerR: 1.8, outerR: 2.8, colorInner: '#ffcc77', colorOuter: '#cc7733',
-      tilt: 0.25, opacity: 0.8, sizeMin: 0.014, sizeMax: 0.07, renderOrder: 3,
-    })
-    const ringB = createRing({
-      count: qCount(2000), innerR: 3.1, outerR: 3.7, colorInner: '#66eecc', colorOuter: '#2288bb',
-      tilt: 0.55, opacity: 0.65, sizeMin: 0.012, sizeMax: 0.055, renderOrder: 2,
-    })
-    const ringC = createRing({
-      count: qCount(1800), innerR: 3.6, outerR: 4.8, colorInner: '#cc99ff', colorOuter: '#5533aa',
-      tilt: 0.78, opacity: 0.6, sizeMin: 0.01, sizeMax: 0.05, renderOrder: 1,
-    })
+    const ringA = createRing({ count: qCount(2500), innerR: 1.8, outerR: 2.8, colorInner: '#ffcc77', colorOuter: '#cc7733', tilt: 0.25, opacity: 0.8, sizeMin: 0.014, sizeMax: 0.07, renderOrder: 3 })
+    const ringB = createRing({ count: qCount(2000), innerR: 3.1, outerR: 3.7, colorInner: '#66eecc', colorOuter: '#2288bb', tilt: 0.55, opacity: 0.65, sizeMin: 0.012, sizeMax: 0.055, renderOrder: 2 })
+    const ringC = createRing({ count: qCount(1800), innerR: 3.6, outerR: 4.8, colorInner: '#cc99ff', colorOuter: '#5533aa', tilt: 0.78, opacity: 0.6, sizeMin: 0.01, sizeMax: 0.05, renderOrder: 1 })
+    scene.add(ringA.group)
+    scene.add(ringB.group)
+    scene.add(ringC.group)
 
     // ═══ Layer 4: 光晕球 ═══
     const glowGeo = new THREE.SphereGeometry(1.58, 64, 48)
@@ -250,35 +240,26 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     // ═══ Layer 6: 大气壳 ═══
     const halo = createSphereParticles({
       count: qCount(1500), radius: PLANET_R, jitterRate: 1.0, jitterAmount: 0.55,
-      colorFn: () => {
-        const t = Math.random()
-        return [0.12 + t * 0.15, 0.3 + t * 0.1, 0.7 + t * 0.25, Math.random() * 0.08 + 0.02 + t * 0.03]
-      },
+      colorFn: () => { const t = Math.random(); return [0.12 + t * 0.15, 0.3 + t * 0.1, 0.7 + t * 0.25, Math.random() * 0.08 + 0.02 + t * 0.03] },
       renderOrder: 6,
       uniforms: { uWave: { value: 0.0 }, uPulse: { value: 1.0 } },
       fragShader: /* glsl */ `
         varying vec3 vColor;
-        void main() {
-          float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.08, d) * 0.45;
-          gl_FragColor = vec4(vColor, alpha);
-        }
+        void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; float alpha = smoothstep(0.5, 0.08, d) * 0.45; gl_FragColor = vec4(vColor, alpha); }
       `,
     })
-    // Patch vertex shader for wave
     halo.mat.vertexShader = /* glsl */ `
       attribute float size; varying vec3 vColor;
       uniform float uWave; uniform float uPulse; uniform vec3 uTint;
       void main() {
-        vColor = color * uTint;
-        vec3 pos = position;
-        float wave = 1.0 + sin(length(pos) * 5.0 + uWave) * 0.03;
-        pos *= wave;
+        vColor = color * uTint; vec3 pos = position;
+        float wave = 1.0 + sin(length(pos) * 5.0 + uWave) * 0.03; pos *= wave;
         vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
         gl_PointSize = size * (320.0 / -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
       }
     `
+    scene.add(halo.points)
 
     // ═══ Layer 7: 流动层 ═══
     const flow = createSphereParticles({
@@ -288,13 +269,10 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       uniforms: { uPulse: { value: 1.0 } },
       fragShader: /* glsl */ `
         varying vec3 vColor;
-        void main() {
-          float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.2, d) * 0.5;
-          gl_FragColor = vec4(vColor, alpha);
-        }
+        void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; float alpha = smoothstep(0.5, 0.2, d) * 0.5; gl_FragColor = vec4(vColor, alpha); }
       `,
     })
+    scene.add(flow.points)
 
     // ═══ Layer 8: 球面 ═══
     const surface = createSphereParticles({
@@ -307,13 +285,10 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       uniforms: { uPulse: { value: 1.0 } },
       fragShader: /* glsl */ `
         varying vec3 vColor;
-        void main() {
-          float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.15, d) * 0.85;
-          gl_FragColor = vec4(vColor, alpha);
-        }
+        void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; float alpha = smoothstep(0.5, 0.15, d) * 0.85; gl_FragColor = vec4(vColor, alpha); }
       `,
     })
+    scene.add(surface.points)
 
     // ═══ Layer 9: 核心 ═══
     const CORE_COUNT = qCount(500)
@@ -330,9 +305,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       cPos[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * r
       cPos[i * 3 + 2] = Math.cos(phi) * r
       const bright = 1 - t
-      cCol[i * 3] = 0.8 + bright * 0.2
-      cCol[i * 3 + 1] = 0.7 + bright * 0.3
-      cCol[i * 3 + 2] = 0.5 + bright * 0.5
+      cCol[i * 3] = 0.8 + bright * 0.2; cCol[i * 3 + 1] = 0.7 + bright * 0.3; cCol[i * 3 + 2] = 0.5 + bright * 0.5
       cSiz[i] = Math.random() * 0.06 + 0.02 + bright * 0.08
     }
     coreGeo.setAttribute('position', new THREE.BufferAttribute(cPos, 3))
@@ -343,21 +316,11 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       vertexShader: /* glsl */ `
         attribute float size; varying vec3 vColor;
         uniform float uPulse; uniform vec3 uTint;
-        void main() {
-          vColor = color * uTint;
-          vec3 pos = position * uPulse;
-          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = size * (350.0 / -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
-        }
+        void main() { vColor = color * uTint; vec3 pos = position * uPulse; vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0); gl_PointSize = size * (350.0 / -mvPosition.z); gl_Position = projectionMatrix * mvPosition; }
       `,
       fragmentShader: /* glsl */ `
         varying vec3 vColor;
-        void main() {
-          float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.0, d) * 0.6;
-          gl_FragColor = vec4(vColor, alpha);
-        }
+        void main() { float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard; float alpha = smoothstep(0.5, 0.0, d) * 0.6; gl_FragColor = vec4(vColor, alpha); }
       `,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
     })
@@ -365,19 +328,16 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     corePoints.renderOrder = 9
     scene.add(corePoints)
 
-    // ═══ 收集所有可着色的材质/灯光 ═══
-    const allTintMats = [
-      ringA.mat, ringB.mat, ringC.mat,
-      surface.mat, flow.mat, halo.mat, coreMat,
-    ]
-    const allRefs = {
+    // ═══ 引用收集 ═══
+    const allTintMats = [ringA.mat, ringB.mat, ringC.mat, surface.mat, flow.mat, halo.mat, coreMat]
+    const refs = {
       scene, camera, renderer, ambient,
       surface, flow, halo, corePoints, coreMat,
       glowMesh, glowMat, occlusionSphere,
       ringA, ringB, ringC, stars, starsMat,
       allTintMats,
     }
-    cleanupRef.current = allRefs
+    cleanupRef.current = refs
 
     // ═══ 渲染循环 ═══
     function animate() {
@@ -394,24 +354,19 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       const spark = sparkleRef.current
       const currentMode = modeRef.current
 
-      // ── 模式切换 ──
+      // 模式切换
       const modeCfg = MODE_TINTS[currentMode] || MODE_TINTS['default']
       const tintColor = new THREE.Color(modeCfg.tint)
       const bgColor = new THREE.Color(modeCfg.bg)
-      const fogColor = new THREE.Color(modeCfg.fog)
-
       if (!ref.scene.background.getHex || ref.scene.background.getHex() !== bgColor.getHex()) {
         ref.scene.background = bgColor
-        ref.scene.fog = new THREE.FogExp2(fogColor, 0.00015)
+        ref.scene.fog = new THREE.FogExp2(modeCfg.fog, 0.00015)
         ref.ambient.color.set(modeCfg.ambient)
         ref.glowMat.uniforms.uColor.value.set(modeCfg.glow)
         ref.occlusionSphere.material.color.set(bgColor)
-        ref.allTintMats.forEach(m => {
-          if (m.uniforms.uTint) m.uniforms.uTint.value = tintColor
-        })
+        ref.allTintMats.forEach(m => { if (m.uniforms.uTint) m.uniforms.uTint.value = tintColor })
       }
 
-      // 亮度
       ref.renderer.toneMappingExposure = 1.2 * brightTarget
 
       // 三环缩放
@@ -432,10 +387,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       ref.occlusionSphere.scale.setScalar(planetTarget)
 
       // 核心脉冲 + 闪光
-      const sparkPulse = 1.0 + spark * 0.3 * Math.sin(time * 12.0)
-      ref.coreMat.uniforms.uPulse.value = (1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02) * sparkPulse
-
-      // 大气波动
+      ref.coreMat.uniforms.uPulse.value = (1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02) * (1.0 + spark * 0.3 * Math.sin(time * 12.0))
       ref.halo.mat.uniforms.uWave.value = time * 2.2
 
       // 差速旋转
@@ -446,7 +398,6 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       ref.stars.rotation.y += 0.00015 * speedMul
       ref.stars.rotation.x += 0.00008 * speedMul
 
-      // 相机呼吸
       ref.camera.position.x = Math.sin(time * 0.25) * 0.6
       ref.camera.position.y = 1.0 + Math.cos(time * 0.35) * 0.25
       ref.camera.lookAt(0, 0, 0)
@@ -455,7 +406,6 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     }
     animate()
 
-    // ═══ Resize ═══
     function onResize() {
       if (disposed || !cleanupRef.current) return
       const { camera, renderer } = cleanupRef.current
