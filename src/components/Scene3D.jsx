@@ -331,7 +331,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     scene.add(corePoints)
 
     // ═══ 爱心粒子心跳系统 ═══
-    const HEART_COUNT = 500
+    const HEART_COUNT = 600
     const heartGeo = new THREE.BufferGeometry()
     const hPos = new Float32Array(HEART_COUNT * 3)
     const hCol = new Float32Array(HEART_COUNT * 3)
@@ -342,18 +342,20 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       const hx = 16 * Math.pow(Math.sin(t), 3)
       const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
       const dir = Math.sqrt(hx * hx + hy * hy) || 1
-      // 三层轮廓：内圈 → 中圈 → 外圈，间距收紧形成饱满轮廓
-      const ring = i % 3
-      const r = 0.55 + ring * 0.06
-      const jitter = (Math.random() - 0.5) * 0.01
-      hPos[i * 3] = hx / dir * (r + jitter)
-      hPos[i * 3 + 1] = hy / dir * (r + jitter)
+      // 前 1/3 粒子：外轮廓；后 2/3：内部填充
+      const isOutline = i < 200
+      const r = isOutline
+        ? 0.55 + (Math.random() - 0.5) * 0.01
+        : 0.05 + Math.random() * 0.48
+      hPos[i * 3] = hx / dir * r
+      hPos[i * 3 + 1] = hy / dir * r
       hPos[i * 3 + 2] = (Math.random() - 0.5) * 0.06
-      // 纯粉 → 粉紫，无白色分量
+      // 轮廓粒子稍亮，填充粒子稍暗
+      const bright = isOutline ? 0.9 : 0.5
       hCol[i * 3] = 1.0
-      hCol[i * 3 + 1] = 0.35 + Math.random() * 0.2
-      hCol[i * 3 + 2] = 0.45 + Math.random() * 0.3
-      hSiz[i] = 0.05 + Math.random() * 0.08
+      hCol[i * 3 + 1] = 0.3 * bright + Math.random() * 0.15
+      hCol[i * 3 + 2] = 0.4 * bright + Math.random() * 0.25
+      hSiz[i] = isOutline ? 0.06 + Math.random() * 0.06 : 0.04 + Math.random() * 0.06
     }
 
     heartGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3))
@@ -379,7 +381,8 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
           float beat = (beat1 * 0.8 + beat2 * 1.0) * uSparkle;
           // 脉搏：从 0.85 缩到 1.0 再弹到 1.15
           float pulse = 1.0 - beat * 0.15 + beat * 0.3 * sin(uTime * 30.0 + position.y * 10.0);
-          vec3 pos = position * pulse;
+          // 粒子从中心爆发：sparkle=0 时全部缩在原点
+          vec3 pos = position * uSparkle * pulse;
           vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
           gl_PointSize = size * (350.0 / -mvPosition.z) * (0.5 + beat * 2.0);
           gl_Position = projectionMatrix * mvPosition;
