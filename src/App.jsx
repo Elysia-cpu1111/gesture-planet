@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import Scene3D from './components/Scene3D'
 import CameraOverlay from './components/CameraOverlay'
+import FocusPanels from './components/FocusPanels'
 import useGesture from './hooks/useGesture'
 
 // ─── 模式配置：4 主题 ───
@@ -133,7 +134,10 @@ export default function App() {
         sparkle={sparkle}
         mode={currentMode.id}
         quality={quality}
+        focus={focusVal}
       />
+
+      <FocusPanels visible={focusVal > 0.5} />
 
       {/* ── 顶部 HUD ── */}
       <div className="hud-top">

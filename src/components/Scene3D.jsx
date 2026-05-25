@@ -125,7 +125,7 @@ const MODE_TINTS = {
   void:    { tint: '#bbaadd', bg: '#0a0814', fog: '#0a0814', glow: '#5533aa', ambient: '#0a0a14' },
 }
 
-export default function Scene3D({ ringScale, planetScale, brightness, speed, sparkle, mode, quality }) {
+export default function Scene3D({ ringScale, planetScale, brightness, speed, sparkle, mode, quality, focus }) {
   const containerRef = useRef(null)
   const cleanupRef = useRef(null)
   const ringScaleRef = useRef(ringScale)
@@ -135,6 +135,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
   const sparkleRef = useRef(sparkle ?? 0)
   const modeRef = useRef(mode ?? 'default')
   const qualityRef = useRef(quality ?? 'high')
+  const focusRef = useRef(focus ?? 0)
 
   useEffect(() => { ringScaleRef.current = ringScale }, [ringScale])
   useEffect(() => { planetScaleRef.current = planetScale }, [planetScale])
@@ -143,6 +144,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
   useEffect(() => { sparkleRef.current = sparkle ?? 0 }, [sparkle])
   useEffect(() => { modeRef.current = mode ?? 'default' }, [mode])
   useEffect(() => { qualityRef.current = quality ?? 'high' }, [quality])
+  useEffect(() => { focusRef.current = focus ?? 0 }, [focus])
 
   useEffect(() => {
     const container = containerRef.current
@@ -398,8 +400,11 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       ref.stars.rotation.y += 0.00015 * speedMul
       ref.stars.rotation.x += 0.00008 * speedMul
 
-      ref.camera.position.x = Math.sin(time * 0.25) * 0.6
-      ref.camera.position.y = 1.0 + Math.cos(time * 0.35) * 0.25
+      // 相机呼吸 + 聚焦推进
+      const focusZ = 7.5 - focusRef.current * 3.0  // focus=1 → z=4.5, focus=0 → z=7.5
+      ref.camera.position.x = Math.sin(time * 0.25) * 0.6 * (1 - focusRef.current * 0.7)
+      ref.camera.position.y = 1.0 + Math.cos(time * 0.35) * 0.25 * (1 - focusRef.current * 0.7)
+      ref.camera.position.z += (focusZ - ref.camera.position.z) * 0.1
       ref.camera.lookAt(0, 0, 0)
 
       ref.renderer.render(ref.scene, ref.camera)
