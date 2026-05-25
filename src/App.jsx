@@ -37,7 +37,6 @@ export default function App() {
     gesture, gestureLabel, confidence, phase, error,
     targetScale, targetBrightness, targetSpeed, targetSparkle, targetFocus,
     thumbBrightness, thumbActive,
-    targetChaos, waveActive,
     videoRef, startCamera,
   } = useGesture()
 
@@ -48,7 +47,6 @@ export default function App() {
   const [speedValue, setSpeedValue] = useState(1.0)
   const [sparkle, setSparkle] = useState(0)
   const [focusVal, setFocusVal] = useState(0)
-  const [chaosVal, setChaosVal] = useState(0)
 
   // 拇指拖拽亮度优先
   const activeBrightness = thumbActive ? thumbBrightness : targetBrightness
@@ -69,7 +67,6 @@ export default function App() {
       targets.speed = targetSpeed
       targets.spark = targetSparkle
       targets.focus = targetFocus
-      targets.chaos = targetChaos
     }
     updateTargets()
 
@@ -111,16 +108,11 @@ export default function App() {
         const diff = targets.focus - prev
         return Math.abs(diff) < 0.003 ? targets.focus : lerp(prev, targets.focus, 0.12)
       })
-      // chaos — 快速响应，散开/收回都快
-      setChaosVal(prev => {
-        const diff = targets.chaos - prev
-        return Math.abs(diff) < 0.005 ? targets.chaos : lerp(prev, targets.chaos, 0.25)
-      })
     }
 
     animId = requestAnimationFrame(smooth)
     return () => cancelAnimationFrame(animId)
-  }, [targetScale, targetBrightness, targetSpeed, targetSparkle, targetFocus, thumbBrightness, thumbActive, targetChaos])
+  }, [targetScale, targetBrightness, targetSpeed, targetSparkle, targetFocus, thumbBrightness, thumbActive])
 
   const currentMode = MODES[modeIndex]
 
@@ -147,7 +139,6 @@ export default function App() {
         mode={currentMode.id}
         quality={quality}
         focus={focusVal}
-        chaos={chaosVal}
       />
 
       <FocusPanels visible={focusVal > 0.5} />
@@ -228,11 +219,10 @@ export default function App() {
       {/* ── 底部 HUD（重新设计） ── */}
       <div className="hud-bottom">
         {/* 当前手势反馈 */}
-        {(gesture !== 'None' || thumbActive || waveActive) && (
+        {(gesture !== 'None' || thumbActive) && (
           <div className="gesture-feedback">
             <span className="gf-icon">
-              {waveActive ? '👋' :
-               thumbActive ? '👍' :
+              {thumbActive ? '👍' :
                gesture === 'Open_Palm' ? '✋' :
                gesture === 'Closed_Fist' ? '✊' :
                gesture === 'Thumb_Up' ? '👍' :
@@ -242,8 +232,7 @@ export default function App() {
                gesture === 'Pointing_Up' ? '☝️' : '👋'}
             </span>
             <span className="gf-effect">
-              {waveActive ? '👋 粒子散射' :
-               thumbActive ? `亮度 ${(thumbBrightness * 100).toFixed(0)}%` :
+              {thumbActive ? `亮度 ${(thumbBrightness * 100).toFixed(0)}%` :
                effectLabels[gesture] || gesture}
             </span>
           </div>

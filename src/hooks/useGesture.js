@@ -49,10 +49,6 @@ export default function useGesture() {
   const [thumbBrightness, setThumbBrightness] = useState(1.0)
   const [thumbActive, setThumbActive] = useState(false)
 
-  // 摇手混沌散射
-  const [targetChaos, setTargetChaos] = useState(0)
-  const [waveActive, setWaveActive] = useState(false)
-
   // Phase 1: 加载模型
   useEffect(() => {
     mountedRef.current = true
@@ -111,7 +107,6 @@ export default function useGesture() {
   function startRecognitionLoop(video) {
     let lastTick = 0
     const thumbHistory = []  // 拇指 x 位置滑动窗口
-    const wristHistory = []  // 手腕 x 位置滑动窗口
 
     function applyEffect(effectName) {
       const effect = GESTURE_EFFECTS[effectName]
@@ -190,37 +185,9 @@ export default function useGesture() {
 
           setThumbBrightness(avgBright)
           setThumbActive(true)
-
-          // ── 摇手检测：手腕 x 位置振荡 ──
-          const wristX = lm[0].x
-          wristHistory.push(wristX)
-          if (wristHistory.length > 25) wristHistory.shift()
-
-          // 统计方向变换次数
-          let dirChanges = 0
-          let lastDir = 0
-          for (let i = 1; i < wristHistory.length; i++) {
-            const d = wristHistory[i] - wristHistory[i - 1]
-            if (Math.abs(d) < 0.006) continue  // 忽略微小抖动
-            const dir = d > 0 ? 1 : -1
-            if (lastDir !== 0 && dir !== lastDir) dirChanges++
-            lastDir = dir
-          }
-
-          // 振幅检查
-          const wristMin = Math.min(...wristHistory)
-          const wristMax = Math.max(...wristHistory)
-          const amplitude = wristMax - wristMin
-
-          const isWaving = dirChanges >= 3 && amplitude > 0.04
-          setWaveActive(isWaving)
-          setTargetChaos(isWaving ? 1.0 : 0)
         } else {
           thumbHistory.length = 0
           setThumbActive(false)
-          wristHistory.length = 0
-          setWaveActive(false)
-          setTargetChaos(0)
         }
 
         // ── 手势分类 ──
@@ -273,7 +240,6 @@ export default function useGesture() {
     gesture, gestureLabel, confidence, phase, error,
     targetScale, targetBrightness, targetSpeed, targetSparkle, targetFocus,
     thumbBrightness, thumbActive,
-    targetChaos, waveActive,
     videoRef, startCamera,
   }
 }

@@ -125,7 +125,7 @@ const MODE_TINTS = {
   void:    { tint: '#bbaadd', bg: '#0a0814', fog: '#0a0814', glow: '#5533aa', ambient: '#0a0a14' },
 }
 
-export default function Scene3D({ ringScale, planetScale, brightness, speed, sparkle, mode, quality, focus, chaos }) {
+export default function Scene3D({ ringScale, planetScale, brightness, speed, sparkle, mode, quality, focus }) {
   const containerRef = useRef(null)
   const cleanupRef = useRef(null)
   const ringScaleRef = useRef(ringScale)
@@ -136,7 +136,6 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
   const modeRef = useRef(mode ?? 'default')
   const qualityRef = useRef(quality ?? 'high')
   const focusRef = useRef(focus ?? 0)
-  const chaosRef = useRef(chaos ?? 0)
 
   useEffect(() => { ringScaleRef.current = ringScale }, [ringScale])
   useEffect(() => { planetScaleRef.current = planetScale }, [planetScale])
@@ -146,7 +145,6 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
   useEffect(() => { modeRef.current = mode ?? 'default' }, [mode])
   useEffect(() => { qualityRef.current = quality ?? 'high' }, [quality])
   useEffect(() => { focusRef.current = focus ?? 0 }, [focus])
-  useEffect(() => { chaosRef.current = chaos ?? 0 }, [chaos])
 
   useEffect(() => {
     const container = containerRef.current
@@ -332,35 +330,86 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     corePoints.renderOrder = 9
     scene.add(corePoints)
 
+    // ═══ 爱心粒子爆发系统 ═══
+    const HEART_COUNT = 250
+    const heartGeo = new THREE.BufferGeometry()
+    const hPos = new Float32Array(HEART_COUNT * 3)
+    const hCol = new Float32Array(HEART_COUNT * 3)
+    const hSiz = new Float32Array(HEART_COUNT)
+
+    for (let i = 0; i < HEART_COUNT; i++) {
+      const t = (i / HEART_COUNT) * Math.PI * 2
+      // 心形参数方程
+      const hx = 16 * Math.pow(Math.sin(t), 3)
+      const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
+      const scale = 0.025 + Math.random() * 0.01
+      // 方向向量（从中心指向心形边缘）
+      const dir = Math.sqrt(hx * hx + hy * hy) || 1
+      const nx = hx / dir * scale * (0.8 + Math.random() * 0.4)
+      const ny = hy / dir * scale * (0.8 + Math.random() * 0.4)
+      // Z轴也给点深度，让心形有厚度
+      const nz = (Math.random() - 0.5) * scale * 0.4
+      hPos[i * 3] = nx
+      hPos[i * 3 + 1] = ny
+      hPos[i * 3 + 2] = nz
+      // 粉红色渐变
+      hCol[i * 3] = 0.9 + Math.random() * 0.1
+      hCol[i * 3 + 1] = 0.15 + Math.random() * 0.2
+      hCol[i * 3 + 2] = 0.3 + Math.random() * 0.3
+      hSiz[i] = 0.03 + Math.random() * 0.08
+    }
+
+    heartGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3))
+    heartGeo.setAttribute('color', new THREE.BufferAttribute(hCol, 3))
+    heartGeo.setAttribute('size', new THREE.BufferAttribute(hSiz, 1))
+
+    const heartMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uSparkle: { value: 0 },
+        uTime: { value: 0 },
+      },
+      vertexShader: /* glsl */ `
+        attribute float size;
+        varying vec3 vColor;
+        uniform float uSparkle;
+        uniform float uTime;
+        void main() {
+          vColor = color;
+          // 粒子从中心爆发：sparkle=0 在原点，sparkle=1 到目标位置
+          float burst = uSparkle * (0.7 + 0.3 * sin(uTime * 8.0 + position.x * 20.0));
+          vec3 target = position;
+          vec3 pos = target * burst * 1.8;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * (300.0 / -mvPosition.z) * (0.5 + uSparkle);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        varying vec3 vColor;
+        void main() {
+          float d = length(gl_PointCoord - 0.5);
+          if (d > 0.5) discard;
+          float alpha = smoothstep(0.5, 0.0, d) * 0.9;
+          gl_FragColor = vec4(vColor, alpha);
+        }
+      `,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
+    })
+
+    const heartPoints = new THREE.Points(heartGeo, heartMat)
+    heartPoints.renderOrder = 10
+    scene.add(heartPoints)
+
     // ═══ 引用收集 ═══
     const allTintMats = [ringA.mat, ringB.mat, ringC.mat, surface.mat, flow.mat, halo.mat, coreMat]
-
-    // ── 注入 chaos uniform + 混沌位移 shader ──
-    const chaosMats = [ringA.mat, ringB.mat, ringC.mat, surface.mat, flow.mat, halo.mat, coreMat]
-    chaosMats.forEach(mat => {
-      mat.uniforms.uChaos = { value: 0 }
-      // 注入 uniform 声明
-      mat.vertexShader = 'uniform float uChaos;\n' + mat.vertexShader
-      // 在 mvPosition 计算后、gl_Position 前注入混沌位移
-      mat.vertexShader = mat.vertexShader.replace(
-        'gl_Position = projectionMatrix * mvPosition;',
-        `{
-      float seed = fract(sin(dot(position, vec3(127.1, 311.7, 74.7))) * 43758.5453);
-      vec3 chaosDir = normalize(vec3(seed - 0.5, (seed * 2.0 - 1.0) * 0.6, (seed * 3.0 - 1.5) * 0.4));
-      float chaosStr = uChaos * (0.3 + seed * 2.0);
-      mvPosition.xyz += chaosDir * chaosStr;
-    }
-    gl_Position = projectionMatrix * mvPosition;`
-      )
-      mat.needsUpdate = true
-    })
 
     const refs = {
       scene, camera, renderer, ambient,
       surface, flow, halo, corePoints, coreMat,
       glowMesh, glowMat, occlusionSphere,
       ringA, ringB, ringC, stars, starsMat,
-      allTintMats, chaosMats,
+      allTintMats,
+      heartPoints, heartMat,
     }
     cleanupRef.current = refs
 
@@ -392,7 +441,10 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
         ref.allTintMats.forEach(m => { if (m.uniforms.uTint) m.uniforms.uTint.value = tintColor })
       }
 
-      // 曝光由下方 spark 区统一控制
+      // 核心脉冲（常驻呼吸）
+      ref.coreMat.uniforms.uPulse.value = 1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02
+      // 曝光
+      ref.renderer.toneMappingExposure = 1.2 * brightTarget
 
       // 三环缩放
       ref.ringA.mat.uniforms.uScale.value = ringTarget
@@ -411,18 +463,10 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       ref.halo.points.scale.setScalar(planetTarget)
       ref.occlusionSphere.scale.setScalar(planetTarget)
 
-      // 核心脉冲 + 闪光（爱你手势：剧烈脉冲）
-      const sparkPulse = 1.0 + spark * 1.5 * Math.abs(Math.sin(time * 14.0))
-      ref.coreMat.uniforms.uPulse.value = (1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02) * sparkPulse
-      // 核心缩放弹跳
-      ref.corePoints.scale.setScalar(planetTarget * (1.0 + spark * 0.6 * Math.abs(Math.sin(time * 14.0))))
-      // 全局亮度闪动
-      ref.renderer.toneMappingExposure = (1.2 + spark * 0.8 * Math.abs(Math.sin(time * 14.0))) * brightTarget
+      // 爱心爆发
+      ref.heartMat.uniforms.uSparkle.value = spark
+      ref.heartMat.uniforms.uTime.value = time
       ref.halo.mat.uniforms.uWave.value = time * 2.2
-
-      // 混沌散射
-      const chaosVal = chaosRef.current
-      ref.chaosMats.forEach(m => { m.uniforms.uChaos.value += (chaosVal - m.uniforms.uChaos.value) * 0.15 })
 
       // 差速旋转
       ref.surface.points.rotation.y += 0.0015 * speedMul
