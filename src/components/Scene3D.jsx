@@ -331,7 +331,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     scene.add(corePoints)
 
     // ═══ 爱心粒子心跳系统 ═══
-    const HEART_COUNT = 350
+    const HEART_COUNT = 500
     const heartGeo = new THREE.BufferGeometry()
     const hPos = new Float32Array(HEART_COUNT * 3)
     const hCol = new Float32Array(HEART_COUNT * 3)
@@ -342,18 +342,18 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       const hx = 16 * Math.pow(Math.sin(t), 3)
       const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
       const dir = Math.sqrt(hx * hx + hy * hy) || 1
-      // 粒子严格在心形轮廓上，两层：内圈 + 外圈
-      const ring = i < HEART_COUNT / 2 ? 0 : 1
-      const r = ring === 0 ? 0.20 : 0.24
-      const jitter = (Math.random() - 0.5) * 0.015
+      // 三层轮廓：内圈 → 中圈 → 外圈，间距收紧形成饱满轮廓
+      const ring = i % 3
+      const r = 0.55 + ring * 0.06
+      const jitter = (Math.random() - 0.5) * 0.01
       hPos[i * 3] = hx / dir * (r + jitter)
       hPos[i * 3 + 1] = hy / dir * (r + jitter)
-      hPos[i * 3 + 2] = (Math.random() - 0.5) * 0.04
-      // 淡粉色
-      hCol[i * 3] = 0.95 + Math.random() * 0.05
-      hCol[i * 3 + 1] = 0.55 + Math.random() * 0.2
-      hCol[i * 3 + 2] = 0.65 + Math.random() * 0.2
-      hSiz[i] = 0.04 + Math.random() * 0.06
+      hPos[i * 3 + 2] = (Math.random() - 0.5) * 0.06
+      // 纯粉 → 粉紫，无白色分量
+      hCol[i * 3] = 1.0
+      hCol[i * 3 + 1] = 0.35 + Math.random() * 0.2
+      hCol[i * 3 + 2] = 0.45 + Math.random() * 0.3
+      hSiz[i] = 0.05 + Math.random() * 0.08
     }
 
     heartGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3))
@@ -390,7 +390,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
         void main() {
           float d = length(gl_PointCoord - 0.5);
           if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.05, d) * 0.85;
+          float alpha = smoothstep(0.5, 0.15, d) * 0.55;
           gl_FragColor = vec4(vColor, alpha);
         }
       `,
