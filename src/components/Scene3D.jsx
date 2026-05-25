@@ -125,7 +125,7 @@ const MODE_TINTS = {
   void:    { tint: '#bbaadd', bg: '#0a0814', fog: '#0a0814', glow: '#5533aa', ambient: '#0a0a14' },
 }
 
-export default function Scene3D({ ringScale, planetScale, brightness, speed, sparkle, mode, quality, focus }) {
+export default function Scene3D({ ringScale, planetScale, brightness, speed, sparkle, mode, quality, focus, chaos }) {
   const containerRef = useRef(null)
   const cleanupRef = useRef(null)
   const ringScaleRef = useRef(ringScale)
@@ -136,6 +136,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
   const modeRef = useRef(mode ?? 'default')
   const qualityRef = useRef(quality ?? 'high')
   const focusRef = useRef(focus ?? 0)
+  const chaosRef = useRef(chaos ?? 0)
 
   useEffect(() => { ringScaleRef.current = ringScale }, [ringScale])
   useEffect(() => { planetScaleRef.current = planetScale }, [planetScale])
@@ -145,6 +146,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
   useEffect(() => { modeRef.current = mode ?? 'default' }, [mode])
   useEffect(() => { qualityRef.current = quality ?? 'high' }, [quality])
   useEffect(() => { focusRef.current = focus ?? 0 }, [focus])
+  useEffect(() => { chaosRef.current = chaos ?? 0 }, [chaos])
 
   useEffect(() => {
     const container = containerRef.current
@@ -332,12 +334,30 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
 
     // ═══ 引用收集 ═══
     const allTintMats = [ringA.mat, ringB.mat, ringC.mat, surface.mat, flow.mat, halo.mat, coreMat]
+
+    // ── 注入 chaos uniform + 混沌位移 shader ──
+    const chaosMats = [ringA.mat, ringB.mat, ringC.mat, surface.mat, flow.mat, halo.mat, coreMat]
+    chaosMats.forEach(mat => {
+      mat.uniforms.uChaos = { value: 0 }
+      // 在 mvPosition 计算后、gl_Position 前注入混沌位移
+      mat.vertexShader = mat.vertexShader.replace(
+        'gl_Position = projectionMatrix * mvPosition;',
+        `{
+      float seed = fract(sin(dot(position, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+      vec3 chaosDir = normalize(vec3(seed - 0.5, (seed * 2.0 - 1.0) * 0.6, (seed * 3.0 - 1.5) * 0.4));
+      float chaosStr = uChaos * (0.3 + seed * 2.0);
+      mvPosition.xyz += chaosDir * chaosStr;
+    }
+    gl_Position = projectionMatrix * mvPosition;`
+      )
+    })
+
     const refs = {
       scene, camera, renderer, ambient,
       surface, flow, halo, corePoints, coreMat,
       glowMesh, glowMat, occlusionSphere,
       ringA, ringB, ringC, stars, starsMat,
-      allTintMats,
+      allTintMats, chaosMats,
     }
     cleanupRef.current = refs
 
@@ -391,6 +411,10 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       // 核心脉冲 + 闪光
       ref.coreMat.uniforms.uPulse.value = (1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02) * (1.0 + spark * 0.3 * Math.sin(time * 12.0))
       ref.halo.mat.uniforms.uWave.value = time * 2.2
+
+      // 混沌散射
+      const chaosVal = chaosRef.current
+      ref.chaosMats.forEach(m => { m.uniforms.uChaos.value += (chaosVal - m.uniforms.uChaos.value) * 0.15 })
 
       // 差速旋转
       ref.surface.points.rotation.y += 0.0015 * speedMul
