@@ -330,6 +330,63 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     corePoints.renderOrder = 9
     scene.add(corePoints)
 
+    // ═══ 爱心轮廓粒子（与脉冲同步） ═══
+    const HEART_COUNT = 300
+    const heartGeo = new THREE.BufferGeometry()
+    const hPos = new Float32Array(HEART_COUNT * 3)
+    const hCol = new Float32Array(HEART_COUNT * 3)
+    const hSiz = new Float32Array(HEART_COUNT)
+
+    for (let i = 0; i < HEART_COUNT; i++) {
+      const t = (i / HEART_COUNT) * Math.PI * 2
+      const hx = 16 * Math.pow(Math.sin(t), 3)
+      const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
+      const dir = Math.sqrt(hx * hx + hy * hy) || 1
+      const ring = i % 3
+      const r = 0.50 + ring * 0.05 + (Math.random() - 0.5) * 0.012
+      hPos[i * 3] = hx / dir * r
+      hPos[i * 3 + 1] = hy / dir * r
+      hPos[i * 3 + 2] = (Math.random() - 0.5) * 0.05
+      hCol[i * 3] = 1.0
+      hCol[i * 3 + 1] = 0.35 + Math.random() * 0.15
+      hCol[i * 3 + 2] = 0.5 + Math.random() * 0.2
+      hSiz[i] = 0.05 + Math.random() * 0.07
+    }
+
+    heartGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3))
+    heartGeo.setAttribute('color', new THREE.BufferAttribute(hCol, 3))
+    heartGeo.setAttribute('size', new THREE.BufferAttribute(hSiz, 1))
+
+    const heartMat = new THREE.ShaderMaterial({
+      uniforms: { uSparkle: { value: 0 } },
+      vertexShader: /* glsl */ `
+        attribute float size;
+        varying vec3 vColor;
+        uniform float uSparkle;
+        void main() {
+          vColor = color;
+          vec3 pos = position * uSparkle;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * (350.0 / -mvPosition.z) * (0.3 + uSparkle * 1.5);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        varying vec3 vColor;
+        void main() {
+          float d = length(gl_PointCoord - 0.5);
+          if (d > 0.5) discard;
+          float alpha = smoothstep(0.5, 0.1, d) * 0.5;
+          gl_FragColor = vec4(vColor, alpha);
+        }
+      `,
+      transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, vertexColors: true,
+    })
+
+    const heartPoints = new THREE.Points(heartGeo, heartMat)
+    heartPoints.renderOrder = 10
+    scene.add(heartPoints)
+
     // ═══ 引用收集 ═══
     const allTintMats = [ringA.mat, ringB.mat, ringC.mat, surface.mat, flow.mat, halo.mat, coreMat]
 
@@ -339,6 +396,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       glowMesh, glowMat, occlusionSphere,
       ringA, ringB, ringC, stars, starsMat,
       allTintMats,
+      heartPoints, heartMat,
     }
     cleanupRef.current = refs
 
@@ -393,11 +451,13 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       ref.halo.points.scale.setScalar(planetTarget)
       ref.occlusionSphere.scale.setScalar(planetTarget)
 
-      // 核心脉冲 + 闪光（爱你手势）
-      const sparkPulse = 1.0 + spark * 1.5 * Math.abs(Math.sin(time * 14.0))
+      // 核心脉冲 + 闪光（爱你手势，~7Hz）
+      const sparkPhase = time * 7.0
+      const sparkPulse = 1.0 + spark * 1.5 * Math.abs(Math.sin(sparkPhase))
       ref.coreMat.uniforms.uPulse.value = (1.0 + Math.sin(time * 1.5) * 0.06 + Math.sin(time * 5.0) * 0.02) * sparkPulse
-      ref.corePoints.scale.setScalar(planetTarget * (1.0 + spark * 0.6 * Math.abs(Math.sin(time * 14.0))))
-      ref.renderer.toneMappingExposure = (1.2 + spark * 0.8 * Math.abs(Math.sin(time * 14.0))) * brightTarget
+      ref.corePoints.scale.setScalar(planetTarget * (1.0 + spark * 0.6 * Math.abs(Math.sin(sparkPhase))))
+      ref.renderer.toneMappingExposure = (1.2 + spark * 0.8 * Math.abs(Math.sin(sparkPhase))) * brightTarget
+      ref.heartMat.uniforms.uSparkle.value += (spark - ref.heartMat.uniforms.uSparkle.value) * 0.2
       ref.halo.mat.uniforms.uWave.value = time * 2.2
 
       // 差速旋转
