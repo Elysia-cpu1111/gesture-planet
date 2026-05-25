@@ -339,6 +339,8 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     const chaosMats = [ringA.mat, ringB.mat, ringC.mat, surface.mat, flow.mat, halo.mat, coreMat]
     chaosMats.forEach(mat => {
       mat.uniforms.uChaos = { value: 0 }
+      // 注入 uniform 声明
+      mat.vertexShader = 'uniform float uChaos;\n' + mat.vertexShader
       // 在 mvPosition 计算后、gl_Position 前注入混沌位移
       mat.vertexShader = mat.vertexShader.replace(
         'gl_Position = projectionMatrix * mvPosition;',
@@ -350,6 +352,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     }
     gl_Position = projectionMatrix * mvPosition;`
       )
+      mat.needsUpdate = true
     })
 
     const refs = {
