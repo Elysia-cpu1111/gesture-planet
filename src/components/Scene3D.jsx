@@ -392,7 +392,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
           gl_FragColor = vec4(vColor, alpha);
         }
       `,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
+      transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, vertexColors: true,
     })
 
     const heartPoints = new THREE.Points(heartGeo, heartMat)
