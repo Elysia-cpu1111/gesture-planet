@@ -330,8 +330,8 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     corePoints.renderOrder = 9
     scene.add(corePoints)
 
-    // ═══ 爱心粒子爆发系统 ═══
-    const HEART_COUNT = 400
+    // ═══ 爱心粒子心跳系统 ═══
+    const HEART_COUNT = 350
     const heartGeo = new THREE.BufferGeometry()
     const hPos = new Float32Array(HEART_COUNT * 3)
     const hCol = new Float32Array(HEART_COUNT * 3)
@@ -339,24 +339,21 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
 
     for (let i = 0; i < HEART_COUNT; i++) {
       const t = (i / HEART_COUNT) * Math.PI * 2
-      // 心形参数方程
       const hx = 16 * Math.pow(Math.sin(t), 3)
       const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
-      const scale = 0.18 + Math.random() * 0.08
-      // 方向向量（从中心指向心形边缘）
       const dir = Math.sqrt(hx * hx + hy * hy) || 1
-      const nx = hx / dir * scale * (0.7 + Math.random() * 0.6)
-      const ny = hy / dir * scale * (0.7 + Math.random() * 0.6)
-      // Z轴也给点深度
-      const nz = (Math.random() - 0.5) * scale * 0.5
-      hPos[i * 3] = nx
-      hPos[i * 3 + 1] = ny
-      hPos[i * 3 + 2] = nz
-      // 粉红→亮红渐变
-      hCol[i * 3] = 0.85 + Math.random() * 0.15
-      hCol[i * 3 + 1] = 0.08 + Math.random() * 0.15
-      hCol[i * 3 + 2] = 0.15 + Math.random() * 0.25
-      hSiz[i] = 0.05 + Math.random() * 0.12
+      // 粒子严格在心形轮廓上，两层：内圈 + 外圈
+      const ring = i < HEART_COUNT / 2 ? 0 : 1
+      const r = ring === 0 ? 0.20 : 0.24
+      const jitter = (Math.random() - 0.5) * 0.015
+      hPos[i * 3] = hx / dir * (r + jitter)
+      hPos[i * 3 + 1] = hy / dir * (r + jitter)
+      hPos[i * 3 + 2] = (Math.random() - 0.5) * 0.04
+      // 淡粉色
+      hCol[i * 3] = 0.95 + Math.random() * 0.05
+      hCol[i * 3 + 1] = 0.55 + Math.random() * 0.2
+      hCol[i * 3 + 2] = 0.65 + Math.random() * 0.2
+      hSiz[i] = 0.04 + Math.random() * 0.06
     }
 
     heartGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3))
@@ -375,11 +372,16 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
         uniform float uTime;
         void main() {
           vColor = color;
-          // 粒子从中心爆发
-          float burst = uSparkle * (0.6 + 0.4 * sin(uTime * 10.0 + position.x * 30.0));
-          vec3 pos = position * burst * 3.0;
+          // 心跳节奏: lub-dub (周期 0.85s)
+          float cycle = mod(uTime, 0.85);
+          float beat1 = smoothstep(0.0, 0.07, cycle) * (1.0 - smoothstep(0.07, 0.14, cycle));
+          float beat2 = smoothstep(0.22, 0.29, cycle) * (1.0 - smoothstep(0.29, 0.36, cycle));
+          float beat = (beat1 * 0.8 + beat2 * 1.0) * uSparkle;
+          // 脉搏：从 0.85 缩到 1.0 再弹到 1.15
+          float pulse = 1.0 - beat * 0.15 + beat * 0.3 * sin(uTime * 30.0 + position.y * 10.0);
+          vec3 pos = position * pulse;
           vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = size * (400.0 / -mvPosition.z) * (0.3 + uSparkle * 1.5);
+          gl_PointSize = size * (350.0 / -mvPosition.z) * (0.5 + beat * 2.0);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -388,7 +390,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
         void main() {
           float d = length(gl_PointCoord - 0.5);
           if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.0, d) * 0.9;
+          float alpha = smoothstep(0.5, 0.05, d) * 0.85;
           gl_FragColor = vec4(vColor, alpha);
         }
       `,
