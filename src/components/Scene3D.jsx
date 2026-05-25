@@ -331,7 +331,7 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
     scene.add(corePoints)
 
     // ═══ 爱心粒子爆发系统 ═══
-    const HEART_COUNT = 250
+    const HEART_COUNT = 400
     const heartGeo = new THREE.BufferGeometry()
     const hPos = new Float32Array(HEART_COUNT * 3)
     const hCol = new Float32Array(HEART_COUNT * 3)
@@ -342,21 +342,21 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       // 心形参数方程
       const hx = 16 * Math.pow(Math.sin(t), 3)
       const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
-      const scale = 0.025 + Math.random() * 0.01
+      const scale = 0.18 + Math.random() * 0.08
       // 方向向量（从中心指向心形边缘）
       const dir = Math.sqrt(hx * hx + hy * hy) || 1
-      const nx = hx / dir * scale * (0.8 + Math.random() * 0.4)
-      const ny = hy / dir * scale * (0.8 + Math.random() * 0.4)
-      // Z轴也给点深度，让心形有厚度
-      const nz = (Math.random() - 0.5) * scale * 0.4
+      const nx = hx / dir * scale * (0.7 + Math.random() * 0.6)
+      const ny = hy / dir * scale * (0.7 + Math.random() * 0.6)
+      // Z轴也给点深度
+      const nz = (Math.random() - 0.5) * scale * 0.5
       hPos[i * 3] = nx
       hPos[i * 3 + 1] = ny
       hPos[i * 3 + 2] = nz
-      // 粉红色渐变
-      hCol[i * 3] = 0.9 + Math.random() * 0.1
-      hCol[i * 3 + 1] = 0.15 + Math.random() * 0.2
-      hCol[i * 3 + 2] = 0.3 + Math.random() * 0.3
-      hSiz[i] = 0.03 + Math.random() * 0.08
+      // 粉红→亮红渐变
+      hCol[i * 3] = 0.85 + Math.random() * 0.15
+      hCol[i * 3 + 1] = 0.08 + Math.random() * 0.15
+      hCol[i * 3 + 2] = 0.15 + Math.random() * 0.25
+      hSiz[i] = 0.05 + Math.random() * 0.12
     }
 
     heartGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3))
@@ -375,12 +375,11 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
         uniform float uTime;
         void main() {
           vColor = color;
-          // 粒子从中心爆发：sparkle=0 在原点，sparkle=1 到目标位置
-          float burst = uSparkle * (0.7 + 0.3 * sin(uTime * 8.0 + position.x * 20.0));
-          vec3 target = position;
-          vec3 pos = target * burst * 1.8;
+          // 粒子从中心爆发
+          float burst = uSparkle * (0.6 + 0.4 * sin(uTime * 10.0 + position.x * 30.0));
+          vec3 pos = position * burst * 3.0;
           vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-          gl_PointSize = size * (300.0 / -mvPosition.z) * (0.5 + uSparkle);
+          gl_PointSize = size * (400.0 / -mvPosition.z) * (0.3 + uSparkle * 1.5);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
