@@ -310,15 +310,14 @@ export default function Scene3D({ ringScale, planetScale, brightness, speed, spa
       cPos[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * cr
       cPos[i * 3 + 2] = Math.cos(phi) * cr
 
-      // 爱心轮廓目标
+      // 爱心轮廓目标（x/y 分开归一化保持比例）
       const ht = (i / CORE_COUNT) * Math.PI * 2
-      const hx = 16 * Math.pow(Math.sin(ht), 3)
-      const hy = 13 * Math.cos(ht) - 5 * Math.cos(2 * ht) - 2 * Math.cos(3 * ht) - Math.cos(4 * ht)
-      const hdir = Math.sqrt(hx * hx + hy * hy) || 1
-      const ring = i % 3
-      const hr = 0.48 + ring * 0.06 + (Math.random() - 0.5) * 0.03
-      cHeart[i * 3] = hx / hdir * hr
-      cHeart[i * 3 + 1] = hy / hdir * hr
+      const hx = Math.pow(Math.sin(ht), 3)
+      const hy = (13 * Math.cos(ht) - 5 * Math.cos(2 * ht) - 2 * Math.cos(3 * ht) - Math.cos(4 * ht)) / 16.0
+      const ring = i % 2
+      const hr = 0.6 + ring * 0.12 + (Math.random() - 0.5) * 0.02
+      cHeart[i * 3] = hx * hr
+      cHeart[i * 3 + 1] = hy * hr
       cHeart[i * 3 + 2] = (Math.random() - 0.5) * 0.06
 
       const bright = 1 - rt
