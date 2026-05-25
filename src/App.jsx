@@ -143,6 +143,17 @@ export default function App() {
 
       <FocusPanels visible={focusVal > 0.5} />
 
+      {/* sparkle 调试指示器 */}
+      {sparkle > 0.3 && (
+        <div style={{
+          position: 'absolute', top: 16, right: 16, zIndex: 200,
+          width: 24, height: 24, borderRadius: '50%',
+          background: `rgba(255,50,100,${sparkle})`,
+          boxShadow: `0 0 ${sparkle * 30}px rgba(255,50,100,${sparkle})`,
+          pointerEvents: 'none',
+        }} />
+      )}
+
       {/* ── 顶部 HUD ── */}
       <div className="hud-top">
         <h1 className="title">手势星球</h1>
